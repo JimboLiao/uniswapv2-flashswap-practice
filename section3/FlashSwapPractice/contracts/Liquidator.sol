@@ -56,9 +56,14 @@ contract Liquidator is IUniswapV2Callee, Ownable {
         require(amount0 > 0 || amount1 > 0, "amount0 or amount1 must be greater than 0");
 
         // 4. decode callback data
+        CallbackData memory decodeData = abi.decode(data, (CallbackData));
         // 5. call liquidate
+        IERC20(decodeData.tokenIn).approve(_FAKE_LENDING_PROTOCOL, 80 * 10 ** 6);
+        IFakeLendingProtocol(_FAKE_LENDING_PROTOCOL).liquidatePosition(); // get eth
         // 6. deposit ETH to WETH9, because we will get ETH from lending protocol
+        IWETH(_WETH9).deposit{value: decodeData.amountOut}();
         // 7. repay WETH to uniswap pool
+        IWETH(_WETH9).transfer(msg.sender, decodeData.amountOut);
 
         // check profit
         require(address(this).balance >= _MINIMUM_PROFIT, "Profit must be greater than 0.01 ether");
@@ -68,8 +73,18 @@ contract Liquidator is IUniswapV2Callee, Ownable {
     function liquidate(address[] calldata path, uint256 amountOut) external {
         require(amountOut > 0, "AmountOut must be greater than 0");
         // 1. get uniswap pool address
+        address pool = IUniswapV2Factory(_UNISWAP_FACTORY).getPair(path[0], path[1]);
         // 2. calculate repay amount
+        uint256 repayAmount = IUniswapV2Router01(_UNISWAP_ROUTER).getAmountsIn(amountOut, path)[0];
         // 3. flash swap from uniswap pool
+        CallbackData memory data;
+        data.tokenIn = path[1];
+        data.tokenOut = path[0];
+        data.amountIn = amountOut;
+        data.amountOut = repayAmount;
+        // swap(uint amount0Out, uint amount1Out, address to, bytes calldata data)
+        // address token0 = IUniswapV2Pair(pool).token0; token0 is weth
+        IUniswapV2Pair(pool).swap(0, amountOut, address(this), abi.encode(data));
     }
 
     receive() external payable {}
